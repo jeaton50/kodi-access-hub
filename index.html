@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Access links for KodiLA, Original Kodi and the iMac media library. Tailscale access is required.">
+  <meta name="theme-color" content="#171b1a">
+  <title>Kodi Control Hub</title>
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="shell">
+    <header class="topbar"><a class="brand" href="./" aria-label="Kodi Control Hub home"><span class="brand-mark" aria-hidden="true">K<span>·</span></span><span>Kodi Control Hub</span></a><span class="private"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="10" width="14" height="11" rx="3"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg>Tailscale access</span></header>
+    <main>
+      <section class="intro"><div class="eyebrow"><span></span> YOUR TRAVEL MEDIA</div><h1>Two boxes.<br>One place to connect.</h1><p>Your controls, assistants and home media library.<br class="desktop-break"> Choose the Kodi you want to use.</p></section>
+      <aside class="connection-note"><span class="connection-icon" aria-hidden="true">↗</span><div><strong>Connect Tailscale first.</strong><p>Use a Tailscale account that has access to these Kodi boxes. Then sign in to the dashboard as usual.</p></div><a href="#connection-help">Connection help <span aria-hidden="true">↓</span></a></aside>
+      <section class="devices" aria-label="Your Kodi machines">
+        <article class="device" data-device="la">
+          <div class="card-top"><span class="device-number">01 / TRAVEL BOX</span><span class="connection-tag">Tailscale</span></div>
+          <div class="device-heading"><div><h2>KodiLA</h2><p>Your second travel Kodi</p></div><div class="screen-icon" aria-hidden="true"><svg viewBox="0 0 76 64"><rect x="7" y="6" width="62" height="42" rx="6"/><path d="M27 58h22M38 48v10"/><path class="play" d="m32 18 16 9-16 9z"/></svg></div></div>
+          <div class="address-row"><div><span class="field-label">PRIVATE ADDRESS</span><code>100.101.134.87</code></div><button class="copy" data-copy="http://100.101.134.87:18802" aria-label="Copy KodiLA dashboard address">Copy <span aria-hidden="true">⧉</span></button></div>
+          <a class="button primary" href="http://100.101.134.87:18802/" target="_blank" rel="noopener noreferrer">Open KodiLA controls <span aria-hidden="true">↗</span></a>
+          <a class="assistant" href="http://100.101.134.87:18800/" target="_blank" rel="noopener noreferrer"><span><span class="spark" aria-hidden="true">✧</span> Open device assistant</span><span aria-hidden="true">↗</span></a>
+          <details class="hotspot"><summary>Connected to the KodiLA Wi-Fi hotspot?</summary><p>Open controls at the hotspot address. Tailscale is not required on this connection.</p><a href="http://172.31.253.1/" target="_blank" rel="noopener noreferrer">172.31.253.1 <span aria-hidden="true">↗</span></a></details>
+        </article>
+        <article class="device" data-device="original">
+          <div class="card-top"><span class="device-number">02 / TRAVEL BOX</span><span class="connection-tag">Tailscale</span></div>
+          <div class="device-heading"><div><h2>Original Kodi</h2><p>Your original travel setup</p></div><div class="screen-icon" aria-hidden="true"><svg viewBox="0 0 76 64"><rect x="7" y="6" width="62" height="42" rx="6"/><path d="M27 58h22M38 48v10"/><path class="play" d="m32 18 16 9-16 9z"/></svg></div></div>
+          <div class="address-row"><div><span class="field-label">PRIVATE ADDRESS</span><code>100.120.53.67</code></div><button class="copy" data-copy="http://100.120.53.67:18802" aria-label="Copy Original Kodi dashboard address">Copy <span aria-hidden="true">⧉</span></button></div>
+          <a class="button primary" href="http://100.120.53.67:18802/" target="_blank" rel="noopener noreferrer">Open Original Kodi controls <span aria-hidden="true">↗</span></a>
+          <a class="assistant" href="http://100.120.53.67:18800/" target="_blank" rel="noopener noreferrer"><span><span class="spark" aria-hidden="true">✧</span> Open device assistant</span><span aria-hidden="true">↗</span></a>
+          <details class="hotspot"><summary>Connected to the jmediabox Wi-Fi hotspot?</summary><p>Open controls at the hotspot address. Tailscale is not required on this connection.</p><a href="http://172.31.254.1/" target="_blank" rel="noopener noreferrer">172.31.254.1 <span aria-hidden="true">↗</span></a></details>
+        </article>
+      </section>
+      <section class="library" aria-labelledby="library-title"><div class="library-icon" aria-hidden="true"><svg viewBox="0 0 32 32"><rect x="3" y="5" width="26" height="22" rx="4"/><path d="M3 12h26M10 5v7M21 5v7m-7 5 6 3-6 3z"/></svg></div><div><span class="field-label">SHARED MEDIA LIBRARY</span><h2 id="library-title">Home Jellyfin · iMac</h2><p>Your movies, TV shows, music and recordings.</p></div><a class="button secondary" href="http://100.117.16.53:8096/" target="_blank" rel="noopener noreferrer">Open Jellyfin <span aria-hidden="true">↗</span></a></section>
+      <section class="help" id="connection-help"><div><span class="eyebrow">BEFORE YOU CONNECT</span><h2>A quick connection check.</h2><p>These links open the controls already running on your devices.</p></div><div class="steps"><div><span>1</span><p><strong>Turn on Tailscale</strong>Connect your phone, tablet or computer using a Tailscale account with access to these boxes.</p></div><div><span>2</span><p><strong>Choose your box</strong>Open its controls in a new tab. The box needs power and an internet connection.</p></div><div><span>3</span><p><strong>Use your existing login</strong>Your Kodi dashboard or assistant may ask for its usual password.</p></div></div></section>
+      <details class="troubleshooting"><summary>A dashboard isn’t opening?</summary><p>Confirm Tailscale is connected and the Kodi box is powered on. Try the same link in your regular browser if an in-app browser cannot reach it. When using a box’s own Wi-Fi hotspot, use the hotspot link on its card instead.</p><p>This page does not monitor device status. Opening a link checks the connection from the device you are using.</p></details>
+    </main>
+    <footer><span>Kodi Control Hub</span><span>Public launcher. Private device connections.</span></footer>
+  </div>
+  <div class="toast" role="status" aria-live="polite"></div>
+  <script src="app.js" defer></script>
+</body>
+</html>
