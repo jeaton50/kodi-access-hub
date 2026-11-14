@@ -6,6 +6,8 @@ A static GitHub Pages launcher for KodiLA, Original Kodi, their existing assista
 
 The website contains links only. It does not proxy private network requests, store device passwords, or authenticate visitors to Kodi. Visitors need Tailscale access to each device and the existing device dashboard login. The shared iMac library requires access to the iMac too.
 
+The **Get Tailscale** button links to the official download page. Visitors must still accept a device-sharing invitation from the owner; installing Tailscale alone does not grant access.
+
 GitHub Pages publication normally makes the launcher public, even when a repository is private. The device addresses remain private Tailscale endpoints.
 
 ## Publish
