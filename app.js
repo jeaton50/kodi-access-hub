@@ -21,7 +21,7 @@ const guideForm = document.getElementById('live-tv-search');
 const searchTargets = {
   la: query => 'http://100.101.134.87:18802/tv-search?q=' + encodeURIComponent(query),
   original: query => 'http://100.120.53.67:18802/tv-search?q=' + encodeURIComponent(query),
-  imac: query => 'http://100.117.16.53:8096/web/#/search?query=' + encodeURIComponent(query)
+  imac: query => 'http://100.117.16.53:8096/web/#/search.html?query=' + encodeURIComponent(query)
 };
 guideForm.addEventListener('submit', event => {
   event.preventDefault();

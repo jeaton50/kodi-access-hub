@@ -20,7 +20,7 @@ References: [Tailscale Android deep-link handler](https://github.com/tailscale/t
 
 Enter a term and choose KodiLA, Original Kodi or the iMac Jellyfin library. The hub opens that box's private `/tv-search` page, where the existing dashboard login protects program results and playback controls. Search covers channel names, program titles, episode names and descriptions in currently loaded current/upcoming guide data. On-now and upcoming filters and paginated results are available. Tune channel buttons play the current live broadcast on the selected Kodi TV; they do not play future programs on demand.
 
-Choosing the iMac opens Jellyfin's own library search at `/web/#/search?query=...`, which covers stored movies, shows, music and recordings rather than live-TV listings. It uses the Jellyfin hash route and query parameter current in Jellyfin 10.9 and later; Jellyfin's own login still applies. Results are not combined across devices: each search opens on the device you picked.
+Choosing the iMac opens Jellyfin's own library search at `/web/#/search.html?query=...`, which covers stored movies, shows, music and recordings rather than live-TV listings. Jellyfin uses a hash router, and `search.html` is the route in every released version through 10.10; newer builds that renamed it to `search` redirect the old path and keep the query string. Jellyfin 10.9 added the `query` parameter, so on 10.8 the search page opens with an empty box. Jellyfin's own login still applies. Results are not combined across devices: each search opens on the device you picked.
 
 Without JavaScript the device selector cannot route the form, so the form is hidden and direct per-device search links are shown instead.
 
