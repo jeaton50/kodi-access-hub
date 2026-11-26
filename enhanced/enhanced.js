@@ -47,6 +47,7 @@
     {id: 'shows', label: 'TV Shows', sub: 'Series, episodes', go: '#browse/shows'},
     {id: 'channels', label: 'TV Channels', sub: 'Live TV, guide', go: '#channels'},
     {id: 'streaming', label: 'Streaming', sub: 'Your services', go: '#browse/streaming'},
+    {id: 'favorites', label: 'Favorites', sub: 'Your picks', go: '#favorites'},
     {id: 'search', label: 'Search', sub: 'Library + streams', go: '#search'},
     {id: 'remote', label: 'Remote', sub: 'Control the TV', go: '#remote'},
     {id: 'power', label: 'Power', sub: 'Shut down safely', go: '#power'}
@@ -87,7 +88,7 @@
     if (!live) return url;
     if (url.startsWith('image://')) return (remoteBase || '') + '/image/' + encodeURIComponent(url);
     if (/^(https?:\/\/|data:)/.test(url)) return url;
-    return (remoteBase || '') + '/image/' + encodeURIComponent(url);
+    return (remoteBase || '') + '/image/' + encodeURIComponent('image://' + encodeURIComponent(url) + '/');
   }
   const art = (item, ...keys) => {
     for (const k of keys) {
@@ -130,7 +131,90 @@
   const minutes = s => s ? Math.round(s / 60) + ' min' : '';
   // JellyCon puts the episode count in "episode" on shows and seasons, so trust the type first.
   const isEpisode = it => it.type === 'episode' || (it.type !== 'tvshow' && it.type !== 'season' && it.type !== 'movie' && it.episode > 0 && !!it.showtitle);
-  const isLauncher = it => it.type === 'unknown' && !it.__channel;
+  const isLauncher = it => it.type === 'unknown' && !it.__channel && !it.__fav;
+
+  // ---------- Favorites: Kodi's own favourites, shared with the TV's Favorites card and row ----------
+  // Favourites.AddFavourite toggles on Kodi 21: the same path again removes it.
+  let favCache = null;
+  let pvrClients = null;
+  async function favorites(force) {
+    if (favCache && !force) return favCache;
+    const r = await rpc('Favourites.GetFavourites', {properties: ['path', 'window', 'windowparameter', 'thumbnail']});
+    favCache = (r && r.favourites) || [];
+    return favCache;
+  }
+  async function channelPath(ch) {
+    // Same form Kodi logs when it tunes a channel: pvr://channels/tv/<group>@-1/<clientid>@<addon>_<uniqueid>.pvr
+    if (!pvrClients) {
+      const r = await rpc('PVR.GetClients');
+      pvrClients = Object.fromEntries(((r && r.clients) || []).map(c => [c.clientid, c.addonid]));
+    }
+    const d = await rpc('PVR.GetChannelDetails', {channelid: ch.channelid, properties: ['clientid', 'uniqueid']});
+    const det = (d && d.channeldetails) || {};
+    const addon = pvrClients[det.clientid];
+    if (!addon || det.uniqueid == null) throw new Error('This channel cannot be saved as a favorite');
+    return 'pvr://channels/tv/All%20channels@-1/' + det.clientid + '@' + addon + '_' + det.uniqueid + '.pvr';
+  }
+  const rawArt = (it, ...keys) => { for (const k of keys) { const v = k === 'thumbnail' ? it.thumbnail : (it.art || {})[k]; if (v) return v; } return ''; };
+  async function favSpec(it) {
+    if (it.__fav) return it.__spec;
+    if (it.__channel) return {title: it.label, type: 'media', path: await channelPath(it), thumbnail: it.thumbnail || ''};
+    let title = line1(it);
+    if (isEpisode(it)) title = it.showtitle + ' S' + pad(it.season) + 'E' + pad(it.episode) + ' - ' + (it.title || it.label);
+    else if (it.type === 'movie' && it.year) title += ' (' + it.year + ')';
+    const thumbnail = rawArt(it, 'poster', 'tvshow.poster', 'thumb', 'thumbnail', 'icon');
+    if (it.filetype === 'directory') return {title, type: 'window', window: 'videos', windowparameter: it.file, thumbnail};
+    return {title, type: 'media', path: it.file, thumbnail};
+  }
+  const favKey = f => f.type === 'window' ? 'w:' + f.windowparameter : 'p:' + (f.path || '');
+  async function isFavorite(it) {
+    if (it.__fav) return true;
+    const spec = await favSpec(it);
+    return (await favorites()).some(f => favKey(f) === favKey(spec));
+  }
+  async function toggleFavorite(it, button) {
+    try {
+      button.disabled = true;
+      button.textContent = 'Saving…';
+      const spec = await favSpec(it);
+      const before = (await favorites(true)).some(f => favKey(f) === favKey(spec));
+      const params = {title: spec.title, type: spec.type};
+      for (const k of ['path', 'window', 'windowparameter', 'thumbnail']) if (spec[k]) params[k] = spec[k];
+      await rpc('Favourites.AddFavourite', params);
+      const after = (await favorites(true)).some(f => favKey(f) === favKey(spec));
+      setStar(button, after);
+      toast(after === before ? 'Favorites unchanged' : after ? 'Added to favorites: ' + spec.title : 'Removed from favorites: ' + spec.title);
+      if (location.hash === '#favorites' && !after) { closeSheet(); route(); }
+    } catch (e) {
+      toast('Could not change favorites: ' + e.message, true);
+      isFavorite(it).then(on => setStar(button, !!on)).catch(() => setStar(button, false));
+    } finally { button.disabled = false; }
+  }
+  function setStar(button, on) {
+    button.textContent = on ? '★ In favorites' : '☆ Add to favorites';
+    button.setAttribute('aria-pressed', on ? 'true' : 'false');
+  }
+  function favItem(f) {
+    return {__fav: true, __spec: f, label: f.title, title: f.title, type: 'unknown', filetype: f.type === 'window' ? 'directory' : 'file',
+      file: f.path || f.windowparameter || '', art: {thumb: f.thumbnail || ''}};
+  }
+  async function openFavorite(it) {
+    const f = it.__spec;
+    try {
+      if (f.type === 'media') await rpc('Player.Open', {item: {file: f.path}});
+      else if (f.type === 'window') await rpc('GUI.ActivateWindow', {window: f.window || 'videos', parameters: f.windowparameter ? [f.windowparameter, 'return'] : []});
+      else {
+        // Scripts and add-on shortcuts can only be started from Kodi's own Favorites list.
+        await rpc('GUI.ActivateWindow', {window: 'favouritesbrowser'}).catch(() => rpc('GUI.ActivateWindow', {window: 'favourites'}));
+        toast('Opened Favorites on the TV. Pick "' + f.title + '" there.');
+        closeSheet();
+        return;
+      }
+      toast((f.type === 'media' ? 'Playing on the TV: ' : 'Opened on the TV: ') + f.title);
+      closeSheet();
+      if (f.type === 'media') setTimeout(pollNow, 1500);
+    } catch (e) { toast('Could not open it on the TV: ' + e.message, true); }
+  }
   function line1(it) { return it.showtitle && isEpisode(it) ? it.showtitle : (it.title || it.label || ''); }
   function line2(it) {
     if (isEpisode(it)) return ['S' + (it.season >= 0 ? it.season : '') + 'E' + it.episode, it.title || it.label].filter(Boolean).join('  •  ');
@@ -233,7 +317,7 @@
     } catch (e) { toast('Could not open it on the TV: ' + e.message, true); }
   }
   function openItem(it, style) {
-    if (it.__channel || isLauncher(it)) return showSheet(it, style);
+    if (it.__channel || it.__fav || isLauncher(it)) return showSheet(it, style);
     // Seasons and plain folders open as a page, like on the TV; shows get a detail card first.
     if (it.filetype === 'directory' && !isEpisode(it) && it.type !== 'movie' && (it.type !== 'tvshow' || !it.plot)) {
       return go('#dir/' + encodePath(it.file, it.label || it.title));
@@ -265,7 +349,13 @@
       actions.append(b);
       return b;
     };
-    if (isLauncher(it)) {
+    if (it.__fav) {
+      $('sheet-title').textContent = it.title;
+      $('sheet-meta').textContent = it.__spec.type === 'media' ? 'Favorite  •  plays on the TV' : 'Favorite  •  opens on the TV';
+      $('sheet-plot').textContent = '';
+      artBox.style.backgroundSize = 'contain';
+      add(it.__spec.type === 'media' ? 'Play on TV' : 'Open on TV', () => openFavorite(it));
+    } else if (isLauncher(it)) {
       $('sheet-title').textContent = it.label || it.title;
       $('sheet-meta').textContent = it.filetype === 'directory' ? 'Service' : 'Opens on the TV';
       $('sheet-plot').textContent = it.plot || '';
@@ -291,6 +381,11 @@
         add(resumable ? 'Resume on TV' : 'Play on TV', () => play(it));
       }
       if (it.type !== 'unknown' || it.year || isEpisode(it)) add('Find streams', () => findStreams(it), true);
+    }
+    if (!isLauncher(it)) {
+      const star = add('☆ Add to favorites', () => toggleFavorite(it, star), true);
+      setStar(star, !!it.__fav);
+      if (!it.__fav) isFavorite(it).then(on => { if (on != null && star.isConnected) setStar(star, on); }).catch(() => {});
     }
     add('Close', closeSheet, true);
     sheet.hidden = false;
@@ -339,6 +434,13 @@
     cards.addEventListener('mouseleave', () => { if (!cards.contains(document.activeElement)) homeHero(); });
     view.replaceChildren(cards);
     const hidden = hiddenRows();
+    const favRow = rowSection('Your favorites', 'wide');
+    view.append(favRow.s);
+    favorites(true).then(list => {
+      if (token !== navToken) return;
+      if (!list.length) { favRow.s.remove(); return; }
+      fill(favRow, list.map(favItem), openItem);
+    }).catch(() => { if (token === navToken) favRow.s.remove(); });
     for (const row of ROWS) {
       if (hidden.has(row.id)) continue;
       const r = rowSection(row.title, row.style);
@@ -547,6 +649,29 @@
     autofocus(padBox.querySelector('.ok'));
   }
 
+  async function renderFavorites(token) {
+    setHero('Favorites', 'Loading…', '', '');
+    const {head, filter} = pageHead('Favorites', true);
+    const grid = el('div', 'grid wide');
+    grid.dataset.nav = 'grid';
+    view.replaceChildren(head, grid);
+    autofocus(head.querySelector('.back'));
+    let list;
+    try { list = await favorites(true); } catch (e) {
+      if (token === navToken) setHero('Favorites', 'Could not load favorites: ' + e.message, '', '');
+      return;
+    }
+    if (token !== navToken) return;
+    const tiles = list.map(favItem).map(it => ({it, node: tile(it, 'wide', openItem)}));
+    grid.replaceChildren(...tiles.map(t => t.node));
+    setHero('Favorites', list.length ? list.length + ' favorites  •  the same list as the TV' : 'No favorites yet', '', '');
+    if (!list.length) grid.append(el('p', 'empty', 'Open any movie, show, episode or channel and choose ☆ Add to favorites.'));
+    filter.addEventListener('input', () => {
+      const q = filter.value.trim().toLowerCase();
+      for (const t of tiles) t.node.hidden = q !== '' && !t.it.title.toLowerCase().includes(q);
+    });
+  }
+
   function renderPower() {
     setHero('Power', 'These act on the Kodi box itself.', '', '');
     const {head} = pageHead('Power', false);
@@ -593,6 +718,7 @@
     if (name === 'search') return renderSearch(decodeURIComponent(arg || ''), token);
     if (name === 'remote') return renderRemote();
     if (name === 'power') return renderPower();
+    if (name === 'favorites') return renderFavorites(token);
     return renderHome(token);
   }
 

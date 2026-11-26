@@ -49,6 +49,11 @@
     recent_tvshows: () => shows,
     random_movies: () => pick(movies, 10, 7)
   };
+  const favs = [
+    {title: 'Northern Lights (2008)', type: 'media', path: 'plugin://demo/movie/0', thumbnail: movies[0].art.poster},
+    {title: 'Harbor Patrol', type: 'window', window: 'videos', windowparameter: 'plugin://demo/show/0', thumbnail: shows[0].art.poster},
+    {title: 'TV Mix', type: 'script', path: '/storage/.kodi/addons/plugin.video.tv.mix/channel_action.py', thumbnail: ''}
+  ];
   let playing = null;
   let paused = false;
   let pos = 0;
@@ -101,6 +106,16 @@
           const t = s => ({hours: Math.floor(s / 3600), minutes: Math.floor(s / 60) % 60, seconds: s % 60, milliseconds: 0});
           return {percentage: 100 * pos / total, speed: paused ? 0 : 1, time: t(pos), totaltime: t(total), live: !!(playing && playing.channel)};
         }
+        case 'Favourites.GetFavourites': return {favourites: favs.map(f => Object.assign({}, f)), limits: {start: 0, end: favs.length, total: favs.length}};
+        case 'Favourites.AddFavourite': {
+          // Kodi 21 toggles: the same path (or window target) again removes it.
+          const key = f => f.type === 'window' ? 'w:' + f.windowparameter : 'p:' + f.path;
+          const i = favs.findIndex(f => key(f) === key(p));
+          if (i >= 0) favs.splice(i, 1); else favs.push(Object.assign({}, p));
+          return 'OK';
+        }
+        case 'PVR.GetClients': return {clients: [{clientid: 2, addonid: 'pvr.iptvsimple'}]};
+        case 'PVR.GetChannelDetails': return {channeldetails: {channelid: p.channelid, clientid: 2, uniqueid: 1000 + p.channelid}};
         case 'Player.PlayPause': paused = !paused; return {speed: paused ? 0 : 1};
         case 'Player.Stop': playing = null; return 'OK';
         case 'Player.Seek': pos = Math.max(0, pos + p.value.seconds); return {};

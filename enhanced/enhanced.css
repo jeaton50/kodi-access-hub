@@ -59,13 +59,13 @@ a { color: inherit; }
   display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 
 /* Section cards (level 1) */
-.cards { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 10px; margin: 8px 0 26px; }
+.cards { display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); gap: 10px; margin: 8px 0 26px; }
 .card {
   position: relative; min-height: 132px; padding: 18px 18px 16px; border: 0; border-radius: 8px; text-align: left;
   cursor: pointer; display: flex; flex-direction: column; justify-content: center; gap: 8px;
   outline: 3px solid transparent; outline-offset: 0; transition: transform .15s, outline-color .15s;
 }
-.card strong { font-size: 21px; font-weight: 600; color: #fff; }
+.card strong { font-size: clamp(16px, 1.45vw, 21px); font-weight: 600; color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .card span { font-size: 14px; color: #d0deeb; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .card:hover, .card:focus-visible, .card.active { outline-color: var(--accent); transform: scale(1.03); }
 .card[data-card="movies"] { background: var(--card-movies); }
@@ -73,6 +73,7 @@ a { color: inherit; }
 .card[data-card="channels"] { background: var(--card-channels); }
 .card[data-card="streaming"] { background: var(--card-streaming); }
 .card[data-card="search"] { background: var(--card-search); }
+.card[data-card="favorites"] { background: linear-gradient(180deg, #6b5a24, #43391a); }
 .card[data-card="remote"] { background: var(--card-remote); }
 .card[data-card="power"] { background: var(--card-power); }
 
