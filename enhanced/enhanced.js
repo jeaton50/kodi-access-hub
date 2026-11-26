@@ -97,6 +97,32 @@
     }
     return '';
   };
+  // ---------- Speed: Kodi runs each JellyCon list as a Python add-on call (~1s each on the Pi).
+  // Fired all at once, 15 rows take ~17s and finish together; two at a time, top rows show in ~1s.
+  const MAX_PARALLEL = 2;
+  const waiting = [];
+  let running = 0;
+  function queued(fn) {
+    return new Promise((resolve, reject) => {
+      waiting.push({fn, resolve, reject});
+      pump();
+    });
+  }
+  function pump() {
+    while (running < MAX_PARALLEL && waiting.length) {
+      const job = waiting.shift();
+      running++;
+      job.fn().then(job.resolve, job.reject).finally(() => { running--; pump(); });
+    }
+  }
+  // Last answer per list, kept in this browser so a return visit paints at once; it is refreshed right after.
+  const CACHE_PREFIX = 'jmb-list:' + location.host + ':';
+  function cacheGet(path) {
+    try { const v = JSON.parse(localStorage.getItem(CACHE_PREFIX + path)); return v && Array.isArray(v.items) ? v.items : null; } catch { return null; }
+  }
+  function cachePut(path, items) {
+    try { localStorage.setItem(CACHE_PREFIX + path, JSON.stringify({at: Date.now(), items})); } catch { /* storage full or blocked */ }
+  }
   async function directory(path, limit) {
     const args = {directory: path, media: 'video', properties: FILE_PROPS};
     if (limit) args.limits = {start: 0, end: limit};
@@ -447,12 +473,26 @@
       if (hidden.has(row.id)) continue;
       const r = rowSection(row.title, row.style);
       view.append(r.s);
-      const load = row.pvr ? recentChannels() : directory(row.path, 25);
-      load.then(items => {
-        if (token !== navToken) return;
-        if (!items.length) { r.s.remove(); return; }
-        fill(r, items, openItem);
-      }).catch(() => { if (token === navToken) r.s.remove(); });
+      const key = row.pvr ? 'pvr-recent' : row.path;
+      const cached = cacheGet(key);
+      let shown = '';
+      if (cached && cached.length) { fill(r, cached, openItem); shown = JSON.stringify(cached); }
+      const refresh = () => queued(() => token === navToken ? (row.pvr ? recentChannels() : directory(row.path, 25)) : Promise.resolve(null))
+        .then(items => {
+          if (!items || token !== navToken) return;
+          cachePut(key, items);
+          if (!items.length) { r.s.remove(); return; }
+          // Don't swap tiles under the user's focus, or when nothing changed.
+          if (JSON.stringify(items) === shown || r.strip.contains(document.activeElement)) return;
+          fill(r, items, openItem);
+        }).catch(() => { if (token === navToken && !shown) r.s.remove(); });
+      // Rows load top-down as they come near the screen.
+      if ('IntersectionObserver' in window) {
+        const io = new IntersectionObserver(entries => {
+          if (entries.some(e => e.isIntersecting)) { io.disconnect(); refresh(); }
+        }, {rootMargin: '900px 0px'});
+        io.observe(r.s);
+      } else refresh();
     }
     autofocus(cards.firstChild);
   }
@@ -491,7 +531,14 @@
     view.replaceChildren(head, grid);
     autofocus(head.querySelector('.back'));
     let items;
-    try { items = await directory(path); } catch (e) {
+    const cached = cacheGet(path);
+    if (cached) {
+      grid.classList.add(guessStyle(cached));
+      grid.replaceChildren(...cached.map(it => tile(it, guessStyle(cached), openItem)));
+      setHero(title, cached.length + ' items  •  refreshing…', '', '');
+    }
+    try { items = await queued(() => directory(path)); cachePut(path, items); grid.className = 'grid'; } catch (e) {
+      if (token === navToken && cached) { setHero(title, cached.length + ' items (saved copy)', '', ''); return; }
       if (token === navToken) { setHero(title, 'Could not load: ' + e.message, '', ''); }
       return;
     }
@@ -506,6 +553,7 @@
       const q = filter.value.trim().toLowerCase();
       for (const t of tiles) t.node.hidden = q !== '' && !(line1(t.it) + ' ' + (t.it.label || '')).toLowerCase().includes(q);
     });
+    if (filter.value) filter.dispatchEvent(new Event('input'));
   }
   function guessStyle(items) {
     const sample = items.slice(0, 10);
