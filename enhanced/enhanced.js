@@ -196,7 +196,9 @@
   }
   function favItem(f) {
     return {__fav: true, __spec: f, label: f.title, title: f.title, type: 'unknown', filetype: f.type === 'window' ? 'directory' : 'file',
-      file: f.path || f.windowparameter || '', art: {thumb: f.thumbnail || ''}};
+      file: f.path || f.windowparameter || '',
+      // Skin icons such as DefaultTVShows.png don't load over the web, so show the title instead.
+      art: {thumb: /^Default[\w.]*\.png$/.test(f.thumbnail || '') ? '' : (f.thumbnail || '')}};
   }
   async function openFavorite(it) {
     const f = it.__spec;
