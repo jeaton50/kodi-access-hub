@@ -157,7 +157,79 @@
   const minutes = s => s ? Math.round(s / 60) + ' min' : '';
   // JellyCon puts the episode count in "episode" on shows and seasons, so trust the type first.
   const isEpisode = it => it.type === 'episode' || (it.type !== 'tvshow' && it.type !== 'season' && it.type !== 'movie' && it.episode > 0 && !!it.showtitle);
-  const isLauncher = it => it.type === 'unknown' && !it.__channel && !it.__fav;
+  // jmediabox "?go=N" items run a Kodi command (launch an add-on, open a TV window), so they have no folder to list.
+  const isLauncher = it => !it.__channel && !it.__fav && /^plugin:\/\/plugin\.video\.jmediabox\/.*[?&]go=\d/.test(it.file || '');
+  // Kodi label tags such as [B]Live TV[/B] or [COLOR red]x[/COLOR].
+  const clean = s => String(s || '').replace(/\[\/?(B|I|LIGHT|UPPERCASE|LOWERCASE|CAPITALIZE|CR|COLOR[^\]]*)\]/gi, '').trim();
+
+  // ---------- Streaming add-ons: browse, search and pick on the phone; only the final pick goes to the TV ----------
+  const addonId = path => (/^plugin:\/\/([^/?]+)/.exec(path || '') || [])[1] || '';
+  const POV = 'plugin://plugin.video.pov/';
+  const SEREN = 'plugin://plugin.video.seren/';
+  // What each jmediabox launcher opens on the TV (pages.json), so the phone can list the same menu.
+  // A '#' value is a page of this menu. Launchers left out (Spelunkr, Recordings, HDHomeRun…) only work on the TV.
+  const LAUNCHERS = {
+    'seren': SEREN, 'seren movies': SEREN + '?action=moviesHome', 'seren tv shows': SEREN + '?action=showsHome',
+    'pov': POV, 'stream movies': POV + '?mode=navigator.main&action=MovieList', 'stream tv shows': POV + '?mode=navigator.main&action=TVShowList',
+    'streaming search': '#find/plugin.video.pov',
+    'tubi': 'plugin://plugin.video.tubitv/', 'tubitv': 'plugin://plugin.video.tubitv/',
+    'debrid cloud': 'plugin://plugin.video.realizerx/?action=rdNavigator', 'realizer (py3)': 'plugin://plugin.video.realizerx/',
+    'youtube': 'plugin://plugin.video.youtube/', 'tmdb helper': 'plugin://plugin.video.themoviedb.helper/',
+    'pluto tv': 'plugin://slyguy.pluto.tv.provider/', 'samsung tv plus': 'plugin://slyguy.samsung.tv.plus/',
+    'pbs live': 'plugin://slyguy.pbs.live/', 'plex live': 'plugin://slyguy.plex.live/',
+    'comet tv live': 'plugin://plugin.video.comettv/', 'shout factory tv': 'plugin://plugin.video.shoutfactorytv/',
+    'tv mix': 'plugin://plugin.video.tv.mix/', 'twilight zone tv': 'plugin://plugin.video.twilight.zone.tv/',
+    'three stooges tv': 'plugin://plugin.video.three.stooges.tv/', 'beverly hillbillies tv': 'plugin://plugin.video.beverly.hillbillies/',
+    'archive tv channels': 'plugin://plugin.video.archive.channels/',
+    'program guide': '#channels', 'all channels': '#channels', 'live tv guide (home)': '#channels'
+  };
+  const launcherTarget = it => LAUNCHERS[clean(it.label || it.title).toLowerCase().replace(/\s*\(disabled\)$/, '')] || '';
+  // The TV's home shortcuts start these through the VPN switch (service.local.vpn.favourites), so playback from here does too.
+  const VPN_ADDONS = new Set(['plugin.video.seren', 'plugin.video.pov', 'plugin.video.tubitv', 'plugin.video.realizerx']);
+  const q1 = q => encodeURIComponent(q);
+  // Searches that take the words in the address, so the TV keyboard never opens.
+  const FINDERS = {
+    'plugin.video.cinehd': {name: 'CINEHD', kinds: [{title: 'CINEHD movies and TV shows', path: q => 'plugin://plugin.video.cinehd/?mode=search&query=' + q1(q)}]},
+    'plugin.video.pov': {name: 'POV', kinds: [
+      {title: 'POV movies', path: q => POV + '?mode=build_movie_list&action=tmdb_movies_search&query=' + q1(q)},
+      {title: 'POV TV shows', path: q => POV + '?mode=build_tvshow_list&action=tmdb_tv_search&query=' + q1(q)}]},
+    'plugin.video.seren': {name: 'Seren', kinds: [
+      {title: 'Seren movies', path: q => SEREN + '?action=moviesSearchResults&actionArgs=' + q1(q)},
+      {title: 'Seren TV shows', path: q => SEREN + '?action=showsSearchResults&actionArgs=' + q1(q)}]},
+    'plugin.video.jmedia.mastersearch': {name: 'Master Search', kinds: [
+      {title: 'Seren, POV and Spelunkr', path: q => 'plugin://plugin.video.jmedia.mastersearch/?mode=search&q=' + q1(q)}]}
+  };
+  // Streaming rows added to the Search page (each takes about a second on the box).
+  const STREAM_SEARCH = [FINDERS['plugin.video.cinehd'].kinds[0], ...FINDERS['plugin.video.pov'].kinds];
+  const qParam = (path, name) => { const m = new RegExp('[?&]' + name + '=([^&]*)').exec(path); return m ? decodeURIComponent(m[1].replace(/\+/g, ' ')) : ''; };
+  // Entries that would pop up the keyboard on the TV. Returns {id, q} for a phone search, {tv: true} for TV only, or null.
+  function keyboardEntry(it) {
+    const f = it.file || '';
+    const id = addonId(f);
+    if (!f.startsWith('plugin://') || id === 'plugin.video.jellycon') return null;
+    if (id === 'plugin.video.cinehd' && /[?&]mode=search(&|$)/.test(f) && !qParam(f, 'query')) return {id};
+    if (id === 'plugin.video.jmedia.mastersearch' && /[?&]mode=search(&|$)/.test(f) && !qParam(f, 'q')) return {id};
+    if (id === 'plugin.video.pov' && /[?&]mode=(get_search_term|navigator\.search)(&|$)/.test(f)) {
+      return /search_type=(people|tmdb_collections|easynews)/.test(f) ? {tv: true} : {id, q: qParam(f, 'query')};
+    }
+    if (id === 'plugin.video.seren' && /[?&]action=(movies|shows)Search(&|$)/.test(f)) return {id, q: qParam(f, 'actionArgs')};
+    if (id === 'plugin.video.jacktook' && /[?&]action=search_direct(&|$)/.test(f)) return {tv: true};
+    if (/^slyguy\./.test(id) && /[?&]_=search(&|$)/.test(f) && !qParam(f, 'query')) return {tv: true};
+    if (id === 'plugin.video.youtube' && /\/search\/input/.test(f)) return {tv: true};
+    // Master Search checks sources in its own window on the TV.
+    if (id === 'plugin.video.jmedia.mastersearch' && /[?&]mode=sources(&|$)/.test(f)) return {tv: true, run: true};
+    if (it.filetype === 'file' && /^(new\s+)?search\b/i.test(clean(it.label))) return {tv: true};
+    return null;
+  }
+  const b64url = s => btoa(unescape(encodeURIComponent(s))).replace(/\+/g, '-').replace(/\//g, '_');
+  // Runs a Kodi command the way the TV's home shortcuts do: through the VPN switch for VPN add-ons.
+  async function tvCommand(builtin, path) {
+    if (VPN_ADDONS.has(addonId(path))) {
+      await rpc('Addons.ExecuteAddon', {addonid: 'service.local.vpn.favourites', params: ['vpn', b64url(builtin)]});
+      return true;
+    }
+    return false;
+  }
 
   // ---------- Favorites: Kodi's own favourites, shared with the TV's Favorites card and row ----------
   // Favourites.AddFavourite toggles on Kodi 21: the same path again removes it.
@@ -243,7 +315,7 @@
       if (f.type === 'media') setTimeout(pollNow, 1500);
     } catch (e) { toast('Could not open it on the TV: ' + e.message, true); }
   }
-  function line1(it) { return it.showtitle && isEpisode(it) ? it.showtitle : (it.title || it.label || ''); }
+  function line1(it) { return clean(it.showtitle && isEpisode(it) ? it.showtitle : (it.title || it.label || '')); }
   function line2(it) {
     if (isEpisode(it)) return ['S' + (it.season >= 0 ? it.season : '') + 'E' + it.episode, it.title || it.label].filter(Boolean).join('  •  ');
     return [it.year || '', minutes(it.runtime)].filter(Boolean).join('  •  ');
@@ -285,7 +357,7 @@
     } else if (pic) {
       a.style.backgroundImage = 'url("' + pic.replace(/"/g, '%22') + '")';
     } else {
-      a.append(el('div', 'fallback', it.label || it.title || ''));
+      a.append(el('div', 'fallback', clean(it.label || it.title)));
     }
     if (style === 'episode' && isEpisode(it)) a.append(el('div', 'badge', 'Season ' + it.season + '  •  Episode ' + it.episode));
     if (it.resume && it.resume.total > 0 && it.resume.position > 0) {
@@ -297,7 +369,7 @@
       b.append(el('div', 't1', now && now.title ? 'Now: ' + now.title : (it.channelnumber ? 'Channel ' + it.channelnumber : 'Live')));
       b.append(el('div', 't2', next && next.title ? 'Next: ' + next.title : ''));
     } else if (style === 'wide') {
-      b.append(el('div', 't1', it.label || it.title));
+      b.append(el('div', 't1', clean(it.label || it.title)));
     } else {
       b.append(el('div', 't1', line1(it)));
       b.append(el('div', 't2', line2(it)));
@@ -313,8 +385,9 @@
   async function play(it) {
     try {
       if (it.__channel) await rpc('Player.Open', {item: {channelid: it.channelid}});
-      else await rpc('Player.Open', {item: {file: it.file}});
-      toast('Playing on the TV: ' + (it.__channel ? it.label : line1(it)));
+      else if (!(await tvCommand('PlayMedia("' + it.file + '")', it.file))) await rpc('Player.Open', {item: {file: it.file}});
+      toast((playable(it) ? 'Playing on the TV: ' : 'Opened on the TV: ') + (it.__channel ? it.label : line1(it)) +
+        (addonId(it.file) && !/jellycon/.test(it.file) && !it.__channel ? '. Pick a source there if it asks.' : ''));
       closeSheet();
       setTimeout(pollNow, 1500);
     } catch (e) { toast('Could not start playback: ' + e.message, true); }
@@ -339,20 +412,37 @@
   async function openOnTv(it) {
     // Same as selecting the tile on the TV: folders open there, jmediabox launchers run their action.
     try {
-      await rpc('GUI.ActivateWindow', {window: 'videos', parameters: [it.file, 'return']});
-      toast('Opened on the TV: ' + (it.label || it.title));
+      if (it.__run) await rpc('Files.GetDirectory', {directory: it.file, media: 'video'});
+      else if (!(await tvCommand('ActivateWindow(Videos,"' + it.file + '",return)', it.file))) {
+        await rpc('GUI.ActivateWindow', {window: 'videos', parameters: [it.file, 'return']});
+      }
+      toast('Opened on the TV: ' + clean(it.label || it.title));
       closeSheet();
     } catch (e) { toast('Could not open it on the TV: ' + e.message, true); }
   }
+  // Plugin items that start playback (or an add-on action) rather than list a folder.
+  const playable = it => it.__channel || it.type === 'movie' || isEpisode(it) || it.type === 'musicvideo' ||
+    /^(plugin:\/\/plugin\.video\.jellycon|videodb|pvr|smb|nfs|https?):/.test(it.file || '') || /[?&](mode=(play|GV)|action=(getSources|play)|mode=play_media)/.test(it.file || '');
   function openItem(it, style) {
-    if (it.__channel || it.__fav || isLauncher(it)) return showSheet(it, style);
+    if (it.__channel || it.__fav) return showSheet(it, style);
+    const kb = keyboardEntry(it);
+    if (kb && kb.id) return go('#find/' + encodeFind(kb.id, kb.q || ''));
+    if (kb) return showSheet(Object.assign({}, it, {__tvOnly: true, __run: !!kb.run}), style);
+    if (isLauncher(it)) {
+      const target = launcherTarget(it);
+      if (target.startsWith('#')) return go(target);
+      if (target) return go('#dir/' + encodePath(target, clean(it.label), it.file));
+      return showSheet(it, style);
+    }
     // Seasons and plain folders open as a page, like on the TV; shows get a detail card first.
     if (it.filetype === 'directory' && !isEpisode(it) && it.type !== 'movie' && (it.type !== 'tvshow' || !it.plot)) {
       return go('#dir/' + encodePath(it.file, it.label || it.title));
     }
     showSheet(it, style);
   }
-  const encodePath = (path, title) => encodeURIComponent(btoa(unescape(encodeURIComponent(JSON.stringify({p: path, t: title || ''})))));
+  // tv: the launcher that opens this folder on the TV (keeps its VPN and window choice).
+  const encodePath = (path, title, tv) => encodeURIComponent(btoa(unescape(encodeURIComponent(JSON.stringify(tv ? {p: path, t: title || '', tv} : {p: path, t: title || ''})))));
+  const encodeFind = (id, q) => encodeURIComponent(id) + (q ? '/' + encodeURIComponent(q) : '');
   function decodePath(s) {
     try { return JSON.parse(decodeURIComponent(escape(atob(decodeURIComponent(s))))); } catch { return null; }
   }
@@ -383,15 +473,12 @@
       $('sheet-plot').textContent = '';
       artBox.style.backgroundSize = 'contain';
       add(it.__spec.type === 'media' ? 'Play on TV' : 'Open on TV', () => openFavorite(it));
-    } else if (isLauncher(it)) {
-      $('sheet-title').textContent = it.label || it.title;
-      $('sheet-meta').textContent = it.filetype === 'directory' ? 'Service' : 'Opens on the TV';
+    } else if (it.__tvOnly || isLauncher(it)) {
+      $('sheet-title').textContent = clean(it.label || it.title);
+      $('sheet-meta').textContent = it.__run ? 'Checks sources in a window on the TV' : it.__tvOnly ? 'This one asks for input on the TV, so it opens there' : 'This service only runs on the TV';
       $('sheet-plot').textContent = it.plot || '';
       artBox.style.backgroundSize = 'contain';
-      add('Open on TV', () => openOnTv(it));
-      if (it.filetype === 'directory' && /^plugin:\/\/plugin\.video\.jmediabox\//.test(it.file)) {
-        add('Browse here', () => { closeSheet(); go('#dir/' + encodePath(it.file, it.label)); }, true);
-      }
+      add(it.__run ? 'Check sources on TV' : 'Open on TV', () => openOnTv(it));
     } else if (it.__channel) {
       const now = it.broadcastnow || {}, next = it.broadcastnext || {};
       $('sheet-title').textContent = it.label;
@@ -406,11 +493,11 @@
       if (folder) add(it.type === 'tvshow' || it.type === 'season' ? 'Open seasons' : 'Open', () => { closeSheet(); go('#dir/' + encodePath(it.file, line1(it))); });
       else {
         const resumable = it.resume && it.resume.position > 0;
-        add(resumable ? 'Resume on TV' : 'Play on TV', () => play(it));
+        add(resumable ? 'Resume on TV' : playable(it) ? 'Play on TV' : 'Open on TV', () => play(it));
       }
       if (it.type !== 'unknown' || it.year || isEpisode(it)) add('Find streams', () => findStreams(it), true);
     }
-    if (!isLauncher(it)) {
+    if (!isLauncher(it) && !it.__tvOnly) {
       const star = add('☆ Add to favorites', () => toggleFavorite(it, star), true);
       setStar(star, !!it.__fav);
       if (!it.__fav) isFavorite(it).then(on => { if (on != null && star.isConnected) setStar(star, on); }).catch(() => {});
@@ -523,13 +610,47 @@
     }
     return {head, filter};
   }
-  async function renderGrid(title, path, token) {
+  // Tools above an add-on folder: search it here, or hand the folder to the TV.
+  function folderTools(path, tvPath, title) {
+    const id = addonId(path);
+    if (!id || id === 'plugin.video.jellycon') return null;
+    const bar = el('div', 'folder-tools');
+    const finder = FINDERS[id];
+    const streamingPage = /^plugin:\/\/plugin\.video\.jmediabox\/\?page=streaming$/.test(path);
+    if (finder || streamingPage) {
+      const form = el('form', 'search-box compact');
+      form.setAttribute('role', 'search');
+      const input = el('input');
+      input.type = 'search';
+      input.placeholder = streamingPage ? 'Search all streaming' : 'Search ' + finder.name;
+      input.setAttribute('aria-label', input.placeholder);
+      const submit = el('button', null, 'Search');
+      submit.type = 'submit';
+      form.append(input, submit);
+      form.addEventListener('submit', e => {
+        e.preventDefault();
+        const q = input.value.trim().slice(0, 120);
+        if (!q) return input.focus();
+        go(streamingPage ? '#search/' + encodeURIComponent(q) : '#find/' + encodeFind(id, q));
+      });
+      bar.append(form);
+    }
+    const tv = el('button', 'action secondary', 'Open this on TV');
+    tv.type = 'button';
+    tv.addEventListener('click', () => openOnTv({file: tvPath || path, label: title}));
+    bar.append(tv);
+    return bar;
+  }
+  async function renderGrid(title, path, token, tvPath) {
     setHero(title, 'Loading…', '', '');
     const {head, filter} = pageHead(title, true);
     const grid = el('div', 'grid');
     grid.dataset.nav = 'grid';
-    view.replaceChildren(head, grid);
+    const tools = folderTools(path, tvPath, title);
+    view.replaceChildren(...[head, tools, grid].filter(Boolean));
     autofocus(head.querySelector('.back'));
+    // An add-on that asks a question (a login, a choice) waits on the TV until someone answers it there.
+    const slow = setTimeout(() => { if (token === navToken && !grid.children.length) setHero(title, 'Still loading… if the TV is asking something, answer it there or with Remote.', '', ''); }, 8000);
     let items;
     const cached = cacheGet(path);
     if (cached) {
@@ -537,7 +658,7 @@
       grid.replaceChildren(...cached.map(it => tile(it, guessStyle(cached), openItem)));
       setHero(title, cached.length + ' items  •  refreshing…', '', '');
     }
-    try { items = await queued(() => directory(path)); cachePut(path, items); grid.className = 'grid'; } catch (e) {
+    try { items = await queued(() => directory(path)).finally(() => clearTimeout(slow)); cachePut(path, items); grid.className = 'grid'; } catch (e) {
       if (token === navToken && cached) { setHero(title, cached.length + ' items (saved copy)', '', ''); return; }
       if (token === navToken) { setHero(title, 'Could not load: ' + e.message, '', ''); }
       return;
@@ -558,7 +679,7 @@
   function guessStyle(items) {
     const sample = items.slice(0, 10);
     if (sample.some(isEpisode)) return 'episode';
-    if (sample.length && sample.every(isLauncher)) return 'wide';
+    if (sample.length && sample.every(it => isLauncher(it) || (it.type === 'unknown' && !it.year))) return 'wide';
     return 'poster';
   }
 
@@ -649,6 +770,18 @@
         })
         .catch(() => { if (token === navToken) { r.strip.classList.remove('loading'); r.strip.replaceChildren(el('p', 'empty', 'Search unavailable.')); } });
     });
+    // Streaming catalogues: pick a title here; the TV only opens to play it (and to pick a source if the add-on asks).
+    for (const k of STREAM_SEARCH) {
+      const r = rowSection(k.title, 'poster');
+      view.append(r.s);
+      jobs.push(queued(() => token === navToken ? directory(k.path(query), 30) : Promise.resolve(null)).then(items => {
+        if (!items || token !== navToken) return;
+        items = items.filter(it => !/^(next page|no matching)/i.test(clean(it.label)));
+        total += items.length;
+        if (!items.length) { r.s.remove(); return; }
+        fill(r, items, openItem);
+      }).catch(() => { if (token === navToken) r.s.remove(); }));
+    }
     const tv = rowSection('On TV now', 'channel');
     view.append(tv.s);
     jobs.push(channels().then(list => {
@@ -661,7 +794,45 @@
       fill(tv, hits, openItem);
     }).catch(() => tv.s.remove()));
     await Promise.all(jobs);
-    if (token === navToken) setHero('Search: ' + query, total ? total + ' results' : 'Nothing in your library. Try Find streams.', '', '');
+    if (token === navToken) setHero('Search: ' + query, total ? total + ' results' : 'Nothing found. Try Find streams in Jacktook.', '', '');
+  }
+
+  // Search inside one streaming add-on, with the words typed on the phone.
+  async function renderFind(id, query, token) {
+    const finder = FINDERS[id];
+    setHero('Search ' + finder.name, 'Type here; results open on the phone first', '', '');
+    const {head} = pageHead(finder.name, false);
+    const form = el('form', 'search-box');
+    form.setAttribute('role', 'search');
+    const input = el('input');
+    input.type = 'search';
+    input.placeholder = 'Search ' + finder.name;
+    input.setAttribute('aria-label', input.placeholder);
+    input.value = query;
+    const submit = el('button', null, 'Search');
+    submit.type = 'submit';
+    form.append(input, submit);
+    form.addEventListener('submit', e => {
+      e.preventDefault();
+      const q = input.value.trim().slice(0, 120);
+      if (q) go('#find/' + encodeFind(id, q), true);
+    });
+    view.replaceChildren(head, form);
+    if (!query) { input.focus(); return; }
+    setHero('Search ' + finder.name + ': ' + query, 'Searching…', '', '');
+    let total = 0;
+    await Promise.all(finder.kinds.map(k => {
+      const r = rowSection(k.title, 'poster');
+      view.append(r.s);
+      return queued(() => token === navToken ? directory(k.path(query)) : Promise.resolve(null)).then(items => {
+        if (!items || token !== navToken) return;
+        total += items.length;
+        if (!items.length) { r.strip.classList.remove('loading'); r.strip.replaceChildren(el('p', 'empty', 'No matches.')); return; }
+        r.style = guessStyle(items) === 'wide' ? 'wide' : 'poster';
+        fill(r, items, openItem);
+      }).catch(e => { if (token === navToken) { r.strip.classList.remove('loading'); r.strip.replaceChildren(el('p', 'empty', 'Search unavailable: ' + e.message)); } });
+    }));
+    if (token === navToken) setHero('Search ' + finder.name + ': ' + query, total ? total + ' results  •  pick one to see what it offers' : 'Nothing found', '', '');
   }
 
   function renderRemote() {
@@ -762,7 +933,12 @@
     }
     if (name === 'dir') {
       const d = decodePath(arg);
-      if (d && typeof d.p === 'string' && /^(plugin|pvr|videodb):\/\//.test(d.p)) return renderGrid(d.t || 'Browse', d.p, token);
+      if (d && typeof d.p === 'string' && /^(plugin|pvr|videodb):\/\//.test(d.p)) {
+        return renderGrid(d.t || 'Browse', d.p, token, typeof d.tv === 'string' && d.tv.startsWith('plugin://') ? d.tv : '');
+      }
+    }
+    if (name === 'find' && Object.hasOwn(FINDERS, decodeURIComponent(rest[0] || ''))) {
+      return renderFind(decodeURIComponent(rest[0]), decodeURIComponent(rest.slice(1).join('/')), token);
     }
     if (name === 'channels') return renderChannels(token);
     if (name === 'search') return renderSearch(decodeURIComponent(arg || ''), token);
