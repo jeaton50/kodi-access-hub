@@ -32,6 +32,11 @@
     {id: 9108, title: 'Live TV', path: 'plugin://plugin.video.jmediabox/?page=live-tv', style: 'wide'},
     {id: 9109, title: 'Random picks', path: widget('random_movies'), style: 'poster'}
   ];
+  // Library search through Jellyfin's SearchTerm, listed by JellyCon like the rows above.
+  const searchPath = (type, q) => JC + 'url=/Users/%7Buserid%7D/Items%3FSearchTerm%3D' +
+    encodeURIComponent(encodeURIComponent(q)) + '%26IncludeItemTypes%3D' + type + '%26Recursive%3DTrue%26Limit%3D25%26Fields%3D' +
+    FIELDS + '%26ImageTypeLimit%3D1%26format%3Djson&mode=GET_CONTENT&media_type=' +
+    {Movie: 'movies', Series: 'tvshows', Episode: 'episodes'}[type];
   const LIBRARY = {
     movies: JC + 'url=/Users/%7Buserid%7D/Items%3FIncludeItemTypes%3DMovie%26CollapseBoxSetItems%3DTrue%26GroupItemsIntoCollections%3DTrue%26Recursive%3DTrue%26IsMissing%3DFalse%26SortBy%3DSortName%26Fields%3D' + FIELDS + '%26ImageTypeLimit%3D1%26ParentId%3Df137a2dd21bbc1b99aa5c0f6bf02a805%26format%3Djson&mode=GET_CONTENT&media_type=movies',
     shows: JC + 'url=/Users/%7Buserid%7D/Items%3FFields%3D' + FIELDS + '%26ImageTypeLimit%3D1%26IsMissing%3DFalse%26IncludeItemTypes%3DSeries%26Recursive%3DTrue%26SortBy%3DSortName%26ParentId%3D767bffe4f11c93ef34b805451a696a4e%26format%3Djson&mode=GET_CONTENT&media_type=tvshows',
@@ -123,7 +128,9 @@
   }
   const pad = n => String(n).padStart(2, '0');
   const minutes = s => s ? Math.round(s / 60) + ' min' : '';
-  const isEpisode = it => it.episode > 0 || it.type === 'episode';
+  // JellyCon puts the episode count in "episode" on shows and seasons, so trust the type first.
+  const isEpisode = it => it.type === 'episode' || (it.type !== 'tvshow' && it.type !== 'season' && it.type !== 'movie' && it.episode > 0 && !!it.showtitle);
+  const isLauncher = it => it.type === 'unknown' && !it.__channel;
   function line1(it) { return it.showtitle && isEpisode(it) ? it.showtitle : (it.title || it.label || ''); }
   function line2(it) {
     if (isEpisode(it)) return ['S' + (it.season >= 0 ? it.season : '') + 'E' + it.episode, it.title || it.label].filter(Boolean).join('  •  ');
@@ -162,7 +169,7 @@
       if (logo) { const i = el('img', 'logo'); i.alt = ''; i.loading = 'lazy'; i.src = logo; a.append(i); }
       a.append(el('div', 'chname', it.label));
       const now = it.broadcastnow;
-      if (now && now.progresspercentage) { const p = el('div', 'prog'); p.style.width = now.progresspercentage + '%'; a.append(p); }
+      if (now && now.progresspercentage > 0) { const p = el('div', 'prog'); p.style.width = now.progresspercentage + '%'; a.append(p); }
     } else if (pic) {
       a.style.backgroundImage = 'url("' + pic.replace(/"/g, '%22') + '")';
     } else {
@@ -217,11 +224,19 @@
       toast('Searching Jacktook on the TV for "' + q + '"');
     } catch (e) { toast('Could not open Jacktook: ' + e.message, true); }
   }
+  async function openOnTv(it) {
+    // Same as selecting the tile on the TV: folders open there, jmediabox launchers run their action.
+    try {
+      await rpc('GUI.ActivateWindow', {window: 'videos', parameters: [it.file, 'return']});
+      toast('Opened on the TV: ' + (it.label || it.title));
+      closeSheet();
+    } catch (e) { toast('Could not open it on the TV: ' + e.message, true); }
+  }
   function openItem(it, style) {
-    if (it.__channel) return showSheet(it, style);
-    if (it.filetype === 'directory' && !isEpisode(it) && it.type !== 'movie') {
-      // Shows, seasons, folders and streaming services open as a page, like on the TV.
-      if (style === 'wide' || it.type === 'unknown' || !it.plot) return go('#dir/' + encodePath(it.file, it.label));
+    if (it.__channel || isLauncher(it)) return showSheet(it, style);
+    // Seasons and plain folders open as a page, like on the TV; shows get a detail card first.
+    if (it.filetype === 'directory' && !isEpisode(it) && it.type !== 'movie' && (it.type !== 'tvshow' || !it.plot)) {
+      return go('#dir/' + encodePath(it.file, it.label || it.title));
     }
     showSheet(it, style);
   }
@@ -250,7 +265,16 @@
       actions.append(b);
       return b;
     };
-    if (it.__channel) {
+    if (isLauncher(it)) {
+      $('sheet-title').textContent = it.label || it.title;
+      $('sheet-meta').textContent = it.filetype === 'directory' ? 'Service' : 'Opens on the TV';
+      $('sheet-plot').textContent = it.plot || '';
+      artBox.style.backgroundSize = 'contain';
+      add('Open on TV', () => openOnTv(it));
+      if (it.filetype === 'directory' && /^plugin:\/\/plugin\.video\.jmediabox\//.test(it.file)) {
+        add('Browse here', () => { closeSheet(); go('#dir/' + encodePath(it.file, it.label)); }, true);
+      }
+    } else if (it.__channel) {
       const now = it.broadcastnow || {}, next = it.broadcastnext || {};
       $('sheet-title').textContent = it.label;
       $('sheet-meta').textContent = [now.title ? 'Now: ' + now.title : '', next.title ? 'Next: ' + next.title : ''].filter(Boolean).join('   ');
@@ -329,7 +353,9 @@
     autofocus(cards.firstChild);
   }
   async function recentChannels() {
-    const list = (await channels()).map(c => Object.assign({__channel: true}, c));
+    // Only the first channels: the full list with guide data can be thousands of entries (megabytes).
+    const r = await rpc('PVR.GetChannels', {channelgroupid: 'alltv', properties: CHANNEL_PROPS, limits: {start: 0, end: 60}});
+    const list = ((r && r.channels) || []).filter(c => !c.hidden && !c.locked).map(c => Object.assign({__channel: true}, c));
     list.sort((a, b) => String(b.lastplayed || '').localeCompare(String(a.lastplayed || '')));
     return list.slice(0, 25);
   }
@@ -380,7 +406,7 @@
   function guessStyle(items) {
     const sample = items.slice(0, 10);
     if (sample.some(isEpisode)) return 'episode';
-    if (sample.length && sample.every(it => it.filetype === 'directory' && !(it.art || {}).poster && it.type === 'unknown')) return 'wide';
+    if (sample.length && sample.every(isLauncher)) return 'wide';
     return 'poster';
   }
 
@@ -397,16 +423,35 @@
       return;
     }
     if (token !== navToken) return;
-    const items = list.map(c => Object.assign({__channel: true}, c));
-    const tiles = items.map(it => ({it, node: tile(it, 'channel', openItem)}));
-    grid.replaceChildren(...tiles.map(t => t.node));
+    const items = list.map(c => Object.assign({__channel: true, __text: [c.label, (c.broadcastnow || {}).title, (c.broadcastnext || {}).title].join(' ').toLowerCase()}, c));
     setHero('TV Channels', items.length + ' channels  •  select one to watch on the TV', '', '');
+    // Render in pages: a box can carry thousands of channels.
+    const PAGE = 120;
+    let matches = items;
+    let shown = 0;
+    const more = el('button', 'action secondary', 'Show more channels');
+    more.type = 'button';
+    const renderMore = () => {
+      const next = matches.slice(shown, shown + PAGE);
+      grid.append(...next.map(it => tile(it, 'channel', openItem)));
+      shown += next.length;
+      more.hidden = shown >= matches.length;
+      more.textContent = 'Show more channels (' + (matches.length - shown) + ' left)';
+    };
+    more.addEventListener('click', renderMore);
+    view.append(more);
+    renderMore();
+    let filterTimer;
     filter.addEventListener('input', () => {
-      const q = filter.value.trim().toLowerCase();
-      for (const t of tiles) {
-        const text = [t.it.label, (t.it.broadcastnow || {}).title, (t.it.broadcastnext || {}).title].join(' ').toLowerCase();
-        t.node.hidden = q !== '' && !text.includes(q);
-      }
+      clearTimeout(filterTimer);
+      filterTimer = setTimeout(() => {
+        const q = filter.value.trim().toLowerCase();
+        matches = q ? items.filter(it => it.__text.includes(q)) : items;
+        shown = 0;
+        grid.replaceChildren();
+        if (!matches.length) grid.append(el('p', 'empty', 'No channels match.'));
+        renderMore();
+      }, 200);
     });
   }
 
@@ -435,18 +480,17 @@
     if (!query) { if (tvStyle) input.focus(); return; }
     setHero('Search: ' + query, 'Searching…', '', '');
     const groups = [
-      {title: 'Movies in your library', type: 'movie', style: 'poster'},
-      {title: 'TV shows in your library', type: 'series', style: 'poster'},
-      {title: 'Episodes in your library', type: 'episode', style: 'episode'}
+      {title: 'Movies in your library', type: 'Movie', style: 'poster'},
+      {title: 'TV shows in your library', type: 'Series', style: 'poster'},
+      {title: 'Episodes in your library', type: 'Episode', style: 'episode'}
     ];
     let total = 0;
     const jobs = groups.map(g => {
       const r = rowSection(g.title, g.style);
       view.append(r.s);
-      return directory(JC + new URLSearchParams({mode: 'NEW_SEARCH', item_type: g.type, query}).toString())
+      return directory(searchPath(g.type, query))
         .then(items => {
           if (token !== navToken) return;
-          items = items.filter(it => it.file && !/mode=NEW_SEARCH/.test(it.file) || it.filetype === 'file');
           total += items.length;
           if (!items.length) { r.strip.classList.remove('loading'); r.strip.replaceChildren(el('p', 'empty', 'No matches.')); return; }
           fill(r, items, openItem);
@@ -459,7 +503,7 @@
       if (token !== navToken) return;
       const q = query.toLowerCase();
       const hits = list.filter(c => [c.label, (c.broadcastnow || {}).title, (c.broadcastnext || {}).title].join(' ').toLowerCase().includes(q))
-        .map(c => Object.assign({__channel: true}, c));
+        .slice(0, 40).map(c => Object.assign({__channel: true}, c));
       total += hits.length;
       if (!hits.length) { tv.s.remove(); return; }
       fill(tv, hits, openItem);

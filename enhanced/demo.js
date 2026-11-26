@@ -61,10 +61,10 @@
       return list.length ? list : pick(/Series/.test(path) ? shows : movies, 4, 2);
     }
     if (/Filters%3DIsPlayed/.test(path)) return pick(movies, 6, 1);
-    if (/NEW_SEARCH/.test(path)) {
-      const q = (new URLSearchParams(path.split('?')[1]).get('query') || '').toLowerCase();
-      const type = new URLSearchParams(path.split('?')[1]).get('item_type');
-      const src = type === 'movie' ? movies : type === 'series' ? shows : episodes;
+    const st = /SearchTerm%3D([^%]*(?:%25[0-9A-F]{2}[^%]*)*)%26IncludeItemTypes%3D(\w+)/.exec(path);
+    if (st) {
+      const q = decodeURIComponent(decodeURIComponent(st[1])).toLowerCase();
+      const src = st[2] === 'Movie' ? movies : st[2] === 'Series' ? shows : episodes;
       return src.filter(x => (x.title + ' ' + (x.showtitle || '')).toLowerCase().includes(q));
     }
     if (/page=streaming/.test(path)) return services;
@@ -86,7 +86,7 @@
           if (p.limits) files = files.slice(p.limits.start, p.limits.end);
           return {files: files.map(f => Object.assign({}, f))};
         }
-        case 'PVR.GetChannels': return {channels: chans};
+        case 'PVR.GetChannels': return {channels: p.limits ? chans.slice(p.limits.start, p.limits.end) : chans};
         case 'XBMC.GetInfoLabels': return {'Weather.Temperature': '41°F', 'Weather.Conditions': 'Clear', 'Weather.Location': 'Fort Worth', 'System.FriendlyName': 'Original Kodi (preview)'};
         case 'Player.Open':
           playing = p.item.channelid ? Object.assign({channel: chans[p.item.channelid - 1].label}, {title: chans[p.item.channelid - 1].broadcastnow.title})
