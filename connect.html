@@ -15,10 +15,15 @@
       <section class="connection-panel" id="connection-panel" aria-labelledby="connection-title" hidden>
         <h2 id="connection-title">Connect to your Kodi</h2>
         <p id="connection-status" role="status" aria-live="polite"></p>
+        <fieldset class="menu-choice" id="menu-choice">
+          <legend>Open with</legend>
+          <label><input type="radio" name="menu-view" value="original" checked> <span><strong>Original controls</strong> The usual dashboard</span></label>
+          <label><input type="radio" name="menu-view" value="enhanced"> <span><strong>Enhanced menu</strong> Looks like the TV home screen</span></label>
+        </fieldset>
         <div class="connect-buttons"><a class="button primary" id="connection-app" href="https://tailscale.com/download" hidden>Open Tailscale app ↗</a><a class="button secondary" id="connection-controls" href="./">Open controls</a><button class="copy" id="connection-cancel" type="button" hidden>Cancel automatic opening</button></div>
-        <p class="connection-caption">The app may ask you to sign in or tap Connect. This page cannot confirm that the VPN is on. Your Kodi dashboard still uses its usual login.</p>
+        <p class="connection-caption">The app may ask you to sign in or tap Connect. This page cannot confirm that the VPN is on. Your Kodi dashboard still uses its usual login. The Enhanced menu runs on the Kodi box itself and needs the JMediaBox Enhanced Menu add-on there. <a class="inline-link" id="enhanced-preview" href="enhanced/?demo=1">Preview it here</a>.</p>
       </section>
-      <section class="help"><div><h2>Need Tailscale?</h2><p><a class="inline-link" href="https://tailscale.com/download" target="_blank" rel="noopener noreferrer">Get the official app ↗</a>. Accept the owner's invitation and sign in. Then return here.</p></div><div class="steps"><p><a class="inline-link" href="connect.html?device=la">Connect KodiLA</a></p><p><a class="inline-link" href="connect.html?device=original">Connect Original Kodi</a></p><p>On a computer or iPhone, turn on Tailscale in its app, then open your selected controls.</p></div></section>
+      <section class="help"><div><h2>Need Tailscale?</h2><p><a class="inline-link" href="https://tailscale.com/download" target="_blank" rel="noopener noreferrer">Get the official app ↗</a>. Accept the owner's invitation and sign in. Then return here.</p></div><div class="steps"><p><a class="inline-link" href="connect.html?device=la">Connect KodiLA</a></p><p><a class="inline-link" href="connect.html?device=original">Connect Original Kodi</a></p><p><a class="inline-link" href="connect.html?device=original&amp;view=enhanced">Original Kodi: Enhanced menu</a></p><p>On a computer or iPhone, turn on Tailscale in its app, then open your selected controls.</p></div></section>
       <noscript><p>Turn on Tailscale, then open <a href="http://100.101.134.87:18802/">KodiLA</a> or <a href="http://100.120.53.67:18802/">Original Kodi</a>.</p></noscript>
     </main>
     <footer><span>Kodi Control Hub</span><span>Public launcher. Private device connections.</span></footer>

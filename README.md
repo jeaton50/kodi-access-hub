@@ -28,6 +28,22 @@ The search service runs on each Kodi box, not on GitHub Pages. Search results ar
 
 GitHub Pages publication normally makes the launcher public, even when a repository is private. The device addresses remain private Tailscale endpoints.
 
+## Enhanced menu
+
+The connect page has an **Open with** choice: *Original controls* (the usual dashboard on port 18802) or *Enhanced menu*, a web copy of the jmediabox TV home screen. The choice is remembered on that browser, and `connect.html?device=original&view=enhanced` preselects it. The Tailscale return-and-open flow honours it too.
+
+The Enhanced menu (`enhanced/`) shows the same section cards and rows as the TV: continue watching, next up, On now channels, recently added, genre rows, streaming services and random picks. Tapping a title opens a detail card with **Play on TV** (or Resume) and **Find streams**, which opens Jacktook on the TV through `script.jmediabox.tools`. There are pages for Movies, TV Shows (into seasons and episodes), TV Channels with now/next, Search (library, live TV and a Jacktook button), a Remote pad and Power. A now-playing bar controls whatever the TV is playing. Arrow keys move around the rows like the TV remote.
+
+It talks to Kodi's JSON-RPC API, so it is served **by Kodi itself** as the web interface add-on `webinterface.jmediabox`, at `http://<box>:8080/addons/webinterface.jmediabox/`. A GitHub Pages copy can't do this: browsers block an https page from calling a plain-http Kodi. Opened from GitHub (`enhanced/?demo=1`), it runs as a preview with sample titles and links to the live copy.
+
+Setup on each Kodi box, once:
+
+1. Build the add-on zip: `python3 kodi/build_webinterface.py` (writes `dist/webinterface.jmediabox-<version>.zip`).
+2. In Kodi, Add-ons → Install from zip file, and pick that zip.
+3. Settings → Services → Control: turn on **Allow remote control via HTTP** (port 8080) and keep a username and password set. The browser asks for that login once.
+
+Rows read the same JellyCon and jmediabox plugin paths as the TV skin's `gen_home.py`, so they match the TV. Rows hidden in a browser are kept in that browser only.
+
 ## Publish
 
 In repository Settings → Pages, select **Deploy from a branch**, choose **main** and **/(root)**. Public-repository Pages is supported on GitHub Free. Keep `.nojekyll` in the root.
@@ -40,5 +56,7 @@ In repository Settings → Pages, select **Deploy from a branch**, choose **main
 - `connection.js`: Tailscale app handoff and per-box return routing
 - `connect.html`: connection help and missing-app fallback
 - `icon.svg`: site icon
+- `enhanced/`: Enhanced menu (`enhanced.js` app, `demo.js` sample data for the preview)
+- `kodi/`: add-on manifest and `build_webinterface.py` packager for the Enhanced menu
 
 No package installation or build step is needed.

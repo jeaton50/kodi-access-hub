@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<addon id="webinterface.jmediabox" version="1.0.0" name="JMediaBox Enhanced Menu" provider-name="Kodi Control Hub">
+  <requires>
+    <import addon="xbmc.webinterface" version="1.0.0"/>
+  </requires>
+  <extension point="xbmc.webinterface" type="static" library="index.html"/>
+  <extension point="xbmc.addon.metadata">
+    <summary lang="en_GB">Web copy of the jmediabox home screen</summary>
+    <description lang="en_GB">Browse your rows, On now TV and search from a phone or computer, and start playback on the TV. Served by Kodi's web server so it can use JSON-RPC directly.</description>
+    <platform>all</platform>
+    <license>MIT</license>
+    <assets>
+      <icon>icon.png</icon>
+    </assets>
+  </extension>
+</addon>
