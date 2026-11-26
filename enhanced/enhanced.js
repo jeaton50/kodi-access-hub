@@ -604,7 +604,14 @@
     }
     if (!/^Arrow/.test(e.key) || !$('sheet').hidden) return;
     const cur = document.activeElement;
-    if (!cur || cur.tagName === 'INPUT') return;
+    if (cur && cur.tagName === 'INPUT') return;
+    if (location.hash === '#remote') {
+      // On the Remote page the arrow keys steer the TV, like the remote's d-pad.
+      rpc('Input.' + e.key.slice(5)).catch(err => toast(err.message, true));
+      e.preventDefault();
+      return;
+    }
+    if (!cur) return;
     const parentNav = cur.parentElement && cur.parentElement.dataset.nav;
     if (!parentNav) return;
     let handled = false;
