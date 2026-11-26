@@ -170,7 +170,7 @@
   // A '#' value is a page of this menu. Launchers left out (Spelunkr, Recordings, HDHomeRun…) only work on the TV.
   const LAUNCHERS = {
     'seren': SEREN, 'seren movies': SEREN + '?action=moviesHome', 'seren tv shows': SEREN + '?action=showsHome',
-    'pov': POV, 'stream movies': POV + '?mode=navigator.main&action=MovieList', 'stream tv shows': POV + '?mode=navigator.main&action=TVShowList',
+    'pov': POV, 'jacktook': 'plugin://plugin.video.jacktook/', 'stream movies': POV + '?mode=navigator.main&action=MovieList', 'stream tv shows': POV + '?mode=navigator.main&action=TVShowList',
     'streaming search': '#find/plugin.video.pov',
     'tubi': 'plugin://plugin.video.tubitv/', 'tubitv': 'plugin://plugin.video.tubitv/',
     'debrid cloud': 'plugin://plugin.video.realizerx/?action=rdNavigator', 'realizer (py3)': 'plugin://plugin.video.realizerx/',
@@ -185,7 +185,7 @@
   };
   const launcherTarget = it => LAUNCHERS[clean(it.label || it.title).toLowerCase().replace(/\s*\(disabled\)$/, '')] || '';
   // The TV's home shortcuts start these through the VPN switch (service.local.vpn.favourites), so playback from here does too.
-  const VPN_ADDONS = new Set(['plugin.video.seren', 'plugin.video.pov', 'plugin.video.tubitv', 'plugin.video.realizerx']);
+  const VPN_ADDONS = new Set(['plugin.video.seren', 'plugin.video.pov', 'plugin.video.jacktook', 'plugin.video.tubitv', 'plugin.video.realizerx']);
   const q1 = q => encodeURIComponent(q);
   // Searches that take the words in the address, so the TV keyboard never opens.
   const FINDERS = {
@@ -408,8 +408,8 @@
   }
   async function jacktookQuery(q) {
     try {
-      await rpc('GUI.ActivateWindow', {window: 'videos', parameters: [
-        'plugin://plugin.video.jacktook/?action=search_direct&mode=direct&query=' + encodeURIComponent(q), 'return']});
+      const path = 'plugin://plugin.video.jacktook/?action=search_direct&mode=direct&query=' + encodeURIComponent(q);
+      if (!(await tvCommand('ActivateWindow(Videos,"' + path + '",return)', path))) await rpc('GUI.ActivateWindow', {window: 'videos', parameters: [path, 'return']});
       toast('Searching Jacktook on the TV for "' + q + '"');
     } catch (e) { toast('Could not open Jacktook: ' + e.message, true); }
   }

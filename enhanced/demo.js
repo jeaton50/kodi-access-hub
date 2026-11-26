@@ -32,7 +32,7 @@
   // The streaming page and add-on menus, shaped like the real ones (jmediabox pages.json, CINEHD, POV, Seren…).
   const JMB = 'plugin://plugin.video.jmediabox/?page=';
   const svc = (label, file, i, dir) => ({label, title: label, type: 'unknown', filetype: dir ? 'directory' : 'file', file, art: {thumb: poster(label, i, 640, 360)}});
-  const services = [svc('Master Search', 'plugin://plugin.video.jmedia.mastersearch/', 0, 1), svc('Jacktook', 'plugin://plugin.video.jacktook/', 1, 1),
+  const services = [svc('Master Search', 'plugin://plugin.video.jmedia.mastersearch/', 0, 1), svc('Jacktook', JMB + 'streaming&go=1', 1),
     svc('Spelunkr', JMB + 'streaming&go=2', 2), svc('Seren', JMB + 'streaming&go=3', 3), svc('POV', JMB + 'streaming&go=4', 4),
     svc('CINEHD', 'plugin://plugin.video.cinehd/', 5, 1), svc('More Services', JMB + 'more-services', 6, 1)];
   const liveTv = [svc('Program Guide', JMB + 'live-tv&go=0', 0), svc('All Channels', JMB + 'live-tv&go=1', 1), svc('Recordings', JMB + 'live-tv&go=2', 2),
