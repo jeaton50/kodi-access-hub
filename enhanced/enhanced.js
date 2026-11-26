@@ -218,7 +218,11 @@
     if (id === 'plugin.video.youtube' && /\/search\/input/.test(f)) return {tv: true};
     // Master Search checks sources in its own window on the TV.
     if (id === 'plugin.video.jmedia.mastersearch' && /[?&]mode=sources(&|$)/.test(f)) return {tv: true, run: true};
-    if (it.filetype === 'file' && /^(new\s+)?search\b/i.test(clean(it.label))) return {tv: true};
+    const label = clean(it.label);
+    // Other add-ons' search entries ask on the TV; Jacktook and YouTube search menus are plain folders.
+    if (/^(new\s+)?search\b/i.test(label) && !FINDERS[id] && (it.filetype === 'file' || !/^plugin\.video\.(jacktook|youtube)$/.test(id))) return {tv: true};
+    // Channel add-ons (TV Mix, Twilight Zone TV…) start or stop playback from folder entries such as "Play …" or "Start TV Mix".
+    if (it.filetype === 'directory' && /^(play|start|stop)\b/i.test(label)) return {tv: true, action: true};
     return null;
   }
   const b64url = s => btoa(unescape(encodeURIComponent(s))).replace(/\+/g, '-').replace(/\//g, '_');
@@ -427,7 +431,7 @@
     if (it.__channel || it.__fav) return showSheet(it, style);
     const kb = keyboardEntry(it);
     if (kb && kb.id) return go('#find/' + encodeFind(kb.id, kb.q || ''));
-    if (kb) return showSheet(Object.assign({}, it, {__tvOnly: true, __run: !!kb.run}), style);
+    if (kb) return showSheet(Object.assign({}, it, {__tvOnly: true, __run: !!kb.run, __action: !!kb.action}), style);
     if (isLauncher(it)) {
       const target = launcherTarget(it);
       if (target.startsWith('#')) return go(target);
@@ -475,10 +479,11 @@
       add(it.__spec.type === 'media' ? 'Play on TV' : 'Open on TV', () => openFavorite(it));
     } else if (it.__tvOnly || isLauncher(it)) {
       $('sheet-title').textContent = clean(it.label || it.title);
-      $('sheet-meta').textContent = it.__run ? 'Checks sources in a window on the TV' : it.__tvOnly ? 'This one asks for input on the TV, so it opens there' : 'This service only runs on the TV';
+      $('sheet-meta').textContent = it.__run ? 'Checks sources in a window on the TV' : it.__action ? 'Runs on the TV' :
+        it.__tvOnly ? 'This one asks for input on the TV, so it opens there' : 'This service only runs on the TV';
       $('sheet-plot').textContent = it.plot || '';
       artBox.style.backgroundSize = 'contain';
-      add(it.__run ? 'Check sources on TV' : 'Open on TV', () => openOnTv(it));
+      add(it.__run ? 'Check sources on TV' : it.__action ? clean(it.label).split(/\s[—-]\s/)[0] + ' on TV' : 'Open on TV', () => openOnTv(it));
     } else if (it.__channel) {
       const now = it.broadcastnow || {}, next = it.broadcastnext || {};
       $('sheet-title').textContent = it.label;
