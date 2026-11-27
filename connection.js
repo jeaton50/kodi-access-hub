@@ -1,9 +1,11 @@
 'use strict';
 (() => {
   const devices = Object.freeze({
-    la: {name: 'KodiLA', url: 'http://100.101.134.87:18802/'},
-    original: {name: 'Original Kodi', url: 'http://100.120.53.67:18802/'}
+    la: {name: 'KodiLA', url: 'http://100.101.134.87:18802/', enhanced: 'http://100.101.134.87:8080/addons/webinterface.jmediabox/'},
+    original: {name: 'Original Kodi', url: 'http://100.120.53.67:18802/', enhanced: 'http://100.120.53.67:8080/addons/webinterface.jmediabox/'}
   });
+  const views = Object.freeze({original: 'controls', enhanced: 'Enhanced menu'});
+  const viewKey = 'kodi-hub-menu-view';
   const android = /Android/i.test(navigator.userAgent);
   const panel = document.getElementById('connection-panel');
   if (!panel) return;
@@ -12,6 +14,9 @@
   const controls = document.getElementById('connection-controls');
   const app = document.getElementById('connection-app');
   const cancel = document.getElementById('connection-cancel');
+  const choices = [...document.querySelectorAll('input[name="menu-view"]')];
+  const preview = document.getElementById('enhanced-preview');
+  let shown = null;
   const key = 'kodi-hub-pending-connection';
   let pending = null;
   let leftPage = false;
@@ -23,9 +28,32 @@
       else sessionStorage.removeItem(key);
     } catch { /* The current page still works without session storage. */ }
   }
+  function currentView() {
+    const checked = choices.find(c => c.checked);
+    return checked && Object.hasOwn(views, checked.value) ? checked.value : 'original';
+  }
+  function setView(value) {
+    if (!Object.hasOwn(views, value)) value = 'original';
+    for (const c of choices) c.checked = c.value === value;
+  }
+  function target(id, view) {
+    const device = devices[id];
+    return view === 'enhanced' ? device.enhanced : device.url;
+  }
+  function label(id, view) {
+    return view === 'enhanced' ? devices[id].name + ' Enhanced menu' : devices[id].name + ' controls';
+  }
+  function updateControls() {
+    if (!shown) return;
+    const view = currentView();
+    controls.href = target(shown, view);
+    controls.textContent = 'Open ' + label(shown, view);
+    if (preview) preview.href = 'enhanced/?demo=1&device=' + encodeURIComponent(shown);
+  }
   function fallback(id) {
     const url = new URL('connect.html', document.baseURI);
     url.searchParams.set('device', id);
+    if (currentView() === 'enhanced') url.searchParams.set('view', 'enhanced');
     return url.href;
   }
   function appLink(id) {
@@ -38,8 +66,8 @@
     const device = devices[id];
     panel.hidden = false;
     title.textContent = 'Connect to ' + device.name;
-    controls.href = device.url;
-    controls.textContent = 'Open ' + device.name + ' controls';
+    shown = id;
+    updateControls();
     app.hidden = !android;
     if (android) app.href = appLink(id);
     app.dataset.connectDevice = id;
@@ -51,7 +79,7 @@
   function start(id) {
     if (!Object.hasOwn(devices, id)) return;
     show(id);
-    pending = {device: id, started: Date.now(), leftPage: false};
+    pending = {device: id, view: currentView(), started: Date.now(), leftPage: false};
     leftPage = false;
     save(pending);
     cancel.hidden = false;
@@ -72,10 +100,11 @@
       return;
     }
     leftPage = false;
-    status.textContent = 'Opening ' + devices[id].name + ' controls. Tailscale must be connected and the box must be online.';
+    const view = Object.hasOwn(views, pending.view) ? pending.view : 'original';
+    status.textContent = 'Opening ' + label(id, view) + '. Tailscale must be connected and the box must be online.';
     timer = setTimeout(() => {
       clear();
-      window.location.assign(devices[id].url);
+      window.location.assign(target(id, view));
     }, 1200);
   }
 
@@ -99,6 +128,18 @@
     } else returned();
   });
   window.addEventListener('pageshow', returned);
+  for (const c of choices) {
+    c.addEventListener('change', () => {
+      try { localStorage.setItem(viewKey, currentView()); } catch { /* optional */ }
+      if (pending) { pending.view = currentView(); save(pending); }
+      if (android && shown) app.href = appLink(shown);
+      updateControls();
+    });
+  }
+  const requestedView = new URL(window.location.href).searchParams.get('view');
+  let savedView = null;
+  try { savedView = localStorage.getItem(viewKey); } catch { /* optional */ }
+  setView(requestedView || savedView || 'original');
   const chosen = new URL(window.location.href).searchParams.get('device');
   if (chosen && Object.hasOwn(devices, chosen)) show(chosen);
   if (new URL(window.location.href).searchParams.has('app_unavailable')) {
@@ -111,6 +152,7 @@
     if (stored && Object.hasOwn(devices, stored.device) && Date.now() - stored.started < 600000) {
       pending = stored;
       leftPage = stored.leftPage === true;
+      if (Object.hasOwn(views, stored.view)) setView(stored.view);
       show(stored.device);
       cancel.hidden = false;
       returned();
