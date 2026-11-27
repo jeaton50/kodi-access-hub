@@ -189,7 +189,7 @@
           if (i >= 0) favs.splice(i, 1); else favs.push(Object.assign({}, p));
           return 'OK';
         }
-        case 'PVR.GetClients': return {clients: [{clientid: 2, addonid: 'pvr.iptvsimple'}]};
+        case 'PVR.GetClients': return {clients: [{clientid: 2, instanceid: 1, addonid: 'pvr.iptvsimple'}]};
         case 'PVR.GetChannelDetails': return {channeldetails: {channelid: p.channelid, clientid: 2, uniqueid: 1000 + p.channelid}};
         case 'Player.PlayPause': paused = !paused; return {speed: paused ? 0 : 1};
         case 'Player.Stop': playing = null; return 'OK';

@@ -246,16 +246,19 @@
     return favCache;
   }
   async function channelPath(ch) {
-    // Same form Kodi logs when it tunes a channel: pvr://channels/tv/<group>@-1/<clientid>@<addon>_<uniqueid>.pvr
+    // Same form Kodi logs when it tunes a channel: pvr://channels/tv/<group>@-1/<instance>@<addon>_<uniqueid>.pvr
+    // The number is the add-on's instance id, not its PVR client id: with two IPTV Simple instances
+    // (client 2 = instance 1, client 3 = instance 2) the client id points at the wrong channel list.
     if (!pvrClients) {
       const r = await rpc('PVR.GetClients');
-      pvrClients = Object.fromEntries(((r && r.clients) || []).map(c => [c.clientid, c.addonid]));
+      pvrClients = Object.fromEntries(((r && r.clients) || []).map(c => [c.clientid, c]));
     }
     const d = await rpc('PVR.GetChannelDetails', {channelid: ch.channelid, properties: ['clientid', 'uniqueid']});
     const det = (d && d.channeldetails) || {};
-    const addon = pvrClients[det.clientid];
-    if (!addon || det.uniqueid == null) throw new Error('This channel cannot be saved as a favorite');
-    return 'pvr://channels/tv/All%20channels@-1/' + det.clientid + '@' + addon + '_' + det.uniqueid + '.pvr';
+    const client = pvrClients[det.clientid];
+    if (!client || det.uniqueid == null) throw new Error('This channel cannot be saved as a favorite');
+    const instance = client.instanceid != null ? client.instanceid : det.clientid;
+    return 'pvr://channels/tv/All%20channels@-1/' + instance + '@' + client.addonid + '_' + det.uniqueid + '.pvr';
   }
   const rawArt = (it, ...keys) => { for (const k of keys) { const v = k === 'thumbnail' ? it.thumbnail : (it.art || {})[k]; if (v) return v; } return ''; };
   async function favSpec(it) {
